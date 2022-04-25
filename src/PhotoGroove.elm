@@ -5,17 +5,51 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (onClick)
 import Browser
 import Array exposing (Array)
+import Html exposing (button)
+import Html exposing (label)
+import Html exposing (input)
+import Html exposing (h3)
+import Random
 
-view : { a | selectedUrl : String, photos : List { b | url : String } } -> Html.Html { description : String, data : String }
+
+type alias Photo = { url : String }
+type alias Model =
+    { photos: List Photo
+    , selectedUrl: String
+    , chosenSize: ThumbnailSize
+    }
+
+-- type alias Msg =
+--     { description : String
+--     , data : String
+--     , size: ThumbnailSize
+--     }
+
+type Msg 
+    = ClickedPhoto String
+    | GotSelectedIndex Int
+    | ClickedSize ThumbnailSize
+    | ClickedSurpriseMe
+
+type ThumbnailSize 
+    = Small
+    | Medium
+    | Large
+
+
+view : Model -> Html.Html Msg
 view model =
     div [ class "content" ]
+        
         [ h1 [] [ text "Photo Groove" ]
-        , div [ id "thumbnails" ] 
-            (List.map
-                
-                (viewThumbnail model.selectedUrl )
-                model.photos
-                )
+        , button 
+            [ onClick ClickedSurpriseMe ]
+            [ text "Surprise me" ]
+        , h3 [] [ text "Thumbnail size:" ]
+        , div [ id "choose-size" ]
+            (List.map viewSizeChooser [Small, Medium, Large])
+        , div [ id "thumbnails", class (sizeToString model.chosenSize) ] 
+            (List.map (viewThumbnail model.selectedUrl ) model.photos)
         , img
             [ class "large"
             , src (urlPrefix ++ "large/" ++ model.selectedUrl)
@@ -23,19 +57,37 @@ view model =
             []
         ]
 
-type alias Photo = { url : String }
-type alias Model =
-    { photos: List Photo
-    , selectedUrl: String
-    }
+randomPhotoPicker : Random.Generator Int
+randomPhotoPicker =
+    Random.int 0 (Array.length photoArray - 1)
 
-viewThumbnail : String -> { a | url : String } -> Html.Html { description : String, data : String }
+getPhotoUrl : Int -> String
+getPhotoUrl index =
+    case Array.get index photoArray of
+        Just photo  -> photo.url
+        Nothing     -> ""
+
+viewThumbnail : String -> Photo -> Html.Html Msg
 viewThumbnail selectedUrl thumb =
         img 
             [ src (urlPrefix ++ thumb.url)
             , classList [ ( "selected", selectedUrl == thumb.url) ]
-            , onClick { description = "ClickedPhoto", data = thumb.url }
+            , onClick (ClickedPhoto thumb.url)
             ] []
+
+viewSizeChooser : ThumbnailSize -> Html.Html Msg
+viewSizeChooser size =
+    label []
+        [ input [ type_ "radio", name "size", onClick (ClickedSize size)] []
+        , text (sizeToString size) 
+        ]
+
+sizeToString : ThumbnailSize -> String
+sizeToString size =
+    case size of
+        Small   -> "small"
+        Medium  -> "med"
+        Large   -> "large"
 
 urlPrefix : String
 urlPrefix =
@@ -57,23 +109,30 @@ initialModel =
         , { url = "3.jpeg" }
         ]
     , selectedUrl = "1.jpeg"
+    , chosenSize = Medium
     }
 
 photoArray : Array Photo
 photoArray =
     Array.fromList initialModel.photos
 
-update : { a | description : String, data : b } -> { c | selectedUrl : b } -> { c | selectedUrl : b }
+update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
-    if msg.description == "ClickedPhoto" then
-        { model | selectedUrl = msg.data }
-    else
-        model
+    case msg of
+    ClickedPhoto url ->
+        ( { model | selectedUrl = url }, Cmd.none )
+    GotSelectedIndex index ->
+        ( { model | selectedUrl = getPhotoUrl index }, Cmd.none )
+    ClickedSize size ->
+        ( { model | chosenSize = size }, Cmd.none )
+    ClickedSurpriseMe ->
+        ( model, Random.generate GotSelectedIndex randomPhotoPicker )
 
-main : Program () { photos : List Photo, selectedUrl : String } { description : String, data : String }
+main : Program () Model Msg
 main =
-    Browser.sandbox 
-        {init = initialModel
+    Browser.element 
+        {init = \flags -> (initialModel, Cmd.none)
         , view = view
         , update = update
+        , subscriptions = \model -> Sub.none
         }
