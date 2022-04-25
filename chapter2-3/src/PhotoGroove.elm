@@ -93,14 +93,6 @@ urlPrefix : String
 urlPrefix =
     "http://elm-in-action.com/"
 
-photoList : String
-photoList =
-    "http://elm-in-action.com/list-photos"
-
-
-isEmpty : String -> Bool
-isEmpty str = str == ""
-
 initialModel : Model
 initialModel =
     { photos =
