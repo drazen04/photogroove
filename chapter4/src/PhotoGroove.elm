@@ -1,21 +1,22 @@
 module PhotoGroove exposing (main)
 
-import Html exposing (div, h1, img, text)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick)
 import Browser
 import Array exposing (Array)
-import Html exposing (button)
-import Html exposing (label)
-import Html exposing (input)
-import Html exposing (h3)
 import Random
+import Html exposing (..)
 
 
 type alias Photo = { url : String }
+--type alias Model =
+--    { photos: List Photo
+--    , selectedUrl: String
+--    , chosenSize: ThumbnailSize
+--    }
+
 type alias Model =
-    { photos: List Photo
-    , selectedUrl: String
+    { status: Status
     , chosenSize: ThumbnailSize
     }
 
@@ -32,7 +33,7 @@ type Status
 
 type Msg 
     = ClickedPhoto String
-    | GotSelectedIndex Int
+    | GotRandomPhoto Photo
     | ClickedSize ThumbnailSize
     | ClickedSurpriseMe
 
@@ -44,8 +45,15 @@ type ThumbnailSize
 
 view : Model -> Html.Html Msg
 view model =
-    div [ class "content" ]
+    div [ class "content" ] <|
+        case model.status of
+            Loaded  photos selectedUrl  -> viewLoaded photos selectedUrl model.chosenSize 
+            Loading                     -> []
+            Errored errorMessage        -> [ text ("Error: " ++ errorMessage)]
         
+
+viewLoaded : List Photo -> String -> ThumbnailSize -> List (Html Msg)
+viewLoaded photos selectedUrl chosenSize =
         [ h1 [] [ text "Photo Groove" ]
         , button 
             [ onClick ClickedSurpriseMe ]
@@ -53,24 +61,16 @@ view model =
         , h3 [] [ text "Thumbnail size:" ]
         , div [ id "choose-size" ]
             (List.map viewSizeChooser [Small, Medium, Large])
-        , div [ id "thumbnails", class (sizeToString model.chosenSize) ] 
-            (List.map (viewThumbnail model.selectedUrl ) model.photos)
+        , div [ id "thumbnails", class (sizeToString chosenSize) ] 
+            (List.map (viewThumbnail selectedUrl ) photos)
         , img
             [ class "large"
-            , src (urlPrefix ++ "large/" ++ model.selectedUrl)
+            , src (urlPrefix ++ "large/" ++ selectedUrl)
             ]
             []
         ]
 
-randomPhotoPicker : Random.Generator Int
-randomPhotoPicker =
-    Random.int 0 (Array.length photoArray - 1)
 
-getPhotoUrl : Int -> String
-getPhotoUrl index =
-    case Array.get index photoArray of
-        Just photo  -> photo.url
-        Nothing     -> ""
 
 viewThumbnail : String -> Photo -> Html.Html Msg
 viewThumbnail selectedUrl thumb =
@@ -100,36 +100,41 @@ urlPrefix =
 
 initialModel : Model
 initialModel =
-    { photos =
-        [ { url = "1.jpeg" }
-        , { url = "2.jpeg" }
-        , { url = "3.jpeg" }
-        ]
-    , selectedUrl = "1.jpeg"
+    { status = Loading
     , chosenSize = Medium
     }
 
-photoArray : Array Photo
-photoArray =
-    Array.fromList initialModel.photos
+
+
+selectUrl : String -> Status -> Status
+selectUrl url status = 
+    case status of
+        Loaded photos _         -> Loaded photos url
+        Loading                 -> status 
+        Errored errorMessage    -> status
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
     case msg of
     ClickedPhoto url ->
-        ( { model | selectedUrl = url }, Cmd.none )
-    GotSelectedIndex index ->
-        ( { model | selectedUrl = getPhotoUrl index }, Cmd.none )
+        ( { model | status = selectUrl url model.status }, Cmd.none )
+    GotRandomPhoto photo ->
+        ( { model | status = selectUrl photo.url model.status }, Cmd.none )
     ClickedSize size ->
         ( { model | chosenSize = size }, Cmd.none )
     ClickedSurpriseMe ->
-        ( model, Random.generate GotSelectedIndex randomPhotoPicker )
+        case model.status of 
+            Loaded (firstPhoto :: otherPhotos) _ ->
+                    Random.uniform firstPhoto otherPhotos
+                        |> Random.generate GotRandomPhoto
+                        |> Tuple.pair model
+            _ -> (model, Cmd.none)
 
 main : Program () Model Msg
 main =
     Browser.element 
-        {init = \flags -> (initialModel, Cmd.none)
+        {init = \_ -> (initialModel, Cmd.none)
         , view = view
         , update = update
-        , subscriptions = \model -> Sub.none
+        , subscriptions = \_ -> Sub.none
         }
